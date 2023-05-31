@@ -1,0 +1,73 @@
+######### heterogeneity test
+
+DGE13351= rownames_to_column(DGE13351, var = "geneSymbols")
+DGE13425= rownames_to_column(DGE13425, var = "geneSymbols")
+DGE26281= rownames_to_column(DGE26281, var = "geneSymbols")
+DGE26366= rownames_to_column(DGE26366, var = "geneSymbols")
+DGE79533= rownames_to_column(DGE79533, var = "geneSymbols")
+
+list_DGE= list(DGE13351=DGE13351, DGE13425=DGE13425, DGE26281=DGE26281, DGE26366=DGE26366, DGE79533=DGE79533)
+mergedlist <- list_DGE %>% reduce(inner_join, by="geneSymbols")
+
+# metavolcanor random effect model for forest plot
+meta_degs_rem <- rem_mv(diffexp=list_DGE,
+                        pcriteria="P.Value",
+                        foldchangecol='logFC', 
+                        genenamecol="geneSymbols",
+                        llcol='CI.L',
+                        rlcol='CI.R',
+                        metathr=0.01, collaps = TRUE)
+
+draw_forest(remres=meta_degs_rem,
+            gene="PBX1",
+            genecol="geneSymbols", 
+            foldchangecol="logFC",
+            llcol="CI.L", 
+            rlcol="CI.R")
+
+# subsetting data for funnel plot
+metavolcanoinput= as.data.frame(t(meta_degs_rem@input))
+colnames(metavolcanoinput)= metavolcanoinput[1,]
+metavolcanoinput= metavolcanoinput[-1,]
+metavolcanoinput= rownames_to_column(metavolcanoinput, var = "values")
+PBX1FP= as.data.frame(metavolcanoinput[,c(1,9)])
+
+write.csv(PBX1FP, file = "PBX1fp.csv")
+
+# funnel plot
+
+pbx1fp= import("PBX1fp.csv")
+yi<-pbx1fp$yi #defining variables
+vi<-pbx1fp$vi
+pbx1rma1= rma(yi,vi, data = pbx1fp, method = "REML") #creating rma file for random effect model
+funnel.rma(pbx1rma1, label = TRUE)
+
+
+########## after removing outliers
+
+list_DGE1= list(DGE26281=DGE26281, DGE26366=DGE26366, DGE79533=DGE79533)
+mergedlist <- list_DGE %>% reduce(inner_join, by="geneSymbols")
+
+#metavolcanor random effect model for forest plot
+meta_degs_rem1 <- rem_mv(diffexp=list_DGE1,
+                        pcriteria="P.Value",
+                        foldchangecol='logFC', 
+                        genenamecol="geneSymbols",
+                        llcol='CI.L',
+                        rlcol='CI.R',
+                        metathr=0.01, collaps = TRUE)
+
+draw_forest(remres=meta_degs_rem1,
+            gene="PBX1",
+            genecol="geneSymbols", 
+            foldchangecol="logFC",
+            llcol="CI.L", 
+            rlcol="CI.R")
+
+# funnel plot
+
+PBX1FP= pbx1fp[-c(1:2),]
+yi<-PBX1FP$yi #defining variables
+vi<-PBX1FP$vi
+pbx1rma2= rma(yi,vi, data = PBX1FP, method = "REML") #creating rma file for random effect model
+funnel.rma(pbx1rma2, label = TRUE)
