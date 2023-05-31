@@ -1,0 +1,176 @@
+#Metafile preparation
+
+#to open rds file, 1st open the directory with files, 2nd opens the file and creates object.
+filename <- file.choose()
+MD_gse13351 <- readRDS(filename) #22269  108
+MD_gse13425 <- readRDS(filename) #14118  191
+MD_gse26281 <- readRDS(filename) #14117  84
+MD_gse26366 <- readRDS(filename) #14118  207
+MD_gse79533 <- readRDS(filename) #22269  230
+
+#merging multiple dataframes through tidyverse
+datasetlist = list(MD_gse13351,MD_gse13425,MD_gse26281, MD_gse26366, MD_gse79533)
+Metafile <- datasetlist %>% reduce(inner_join, by='gene.symbol')
+dim(Metafile)  #14117  713
+
+#importing merged phenodata
+Pmeta3 <- import("Pmeta3.xlsx")
+dim(Pmeta3)  #713  5
+
+#making model matrix with batches of phenodata for batch correction
+modphenoBC = model.matrix(~1, data=Pmeta3)
+PhenoBatch = Pmeta3$Dataset_IDs
+
+#converting gene symbols to rownames and forming uniform matrix of metafile
+Metafile= column_to_rownames(Metafile, var="gene.symbol")
+Metafile.numeric = mutate_all(Metafile, as.numeric)
+
+#batch correction 
+MetaBC1 = ComBat(dat= Metafile.numeric, batch=PhenoBatch, mod = modphenoBC)
+#dim(MetaBC1)- 14085  954
+pmeta= Pmeta5[-c(239:467),]
+
+# PCA plot before batch correction
+pca_before<-prcomp(t(Metafile.numeric))
+autoplot(pca_before, data=Pmeta3, colour= "Dataset_IDs" ,main="Before batch correction", scale. = TRUE)+ theme_bw()
+
+# PCA plot after batch effects removal
+pca_after<-prcomp(t(MetaBC1))
+autoplot(pca_after, data=Pmeta3, colour= "Dataset_IDs", main="After batch correction", scale. = TRUE)+ theme_bw()
+
+# DGE after batch correction
+f.source=factor(Pmeta3$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit_metafile=lmFit(MetaBC1, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit_metafile, contrast.matrix)
+fit2 <- eBayes(fit2)
+
+#making top table of DEGs (top 10 and all)
+DGE_metafile<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
+
+#adding differential expression column in table
+DGE_metafile$DE = "NO"
+DGE_metafile$DE[DGE_metafile$logFC>1 & DGE_metafile$adj.P.Val<10^-25] = "UP"
+DGE_metafile$DE[DGE_metafile$logFC< -1 & DGE_metafile$adj.P.Val<10^-25] = "DOWN"
+
+#ggplot for top expressed genes
+ggplot(data = DGE_metafile, aes(x = logFC, y = -log10(adj.P.Val), col = DE, label=GeneSymbol)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = -log10(10^-25), col = "black", linetype = "dashed") +
+  geom_vline(xintercept = c(-1, 1), col = "black", linetype = "dashed") +
+  scale_color_manual(values = c("blue", "grey", "red"),
+                labels = c("Downregulated", "Not significant", "Upregulated")) +
+  geom_text(check_overlap = TRUE, hjust=0.5,vjust=-1)
+  
+  #Unmerging datasets
+
+MetaBC1.df= as.data.frame(t(MetaBC1))
+Pmeta3.df= Pmeta3[,c(1,3)]
+MetaBC1.df= rownames_to_column(MetaBC1.df, var = "sample_IDs")
+MetaBC1.df= cbind(MetaBC1.df, Pmeta3.df)
+MetaBC1.df= MetaBC1.df %>% relocate(batch)
+MetaBC1.df= column_to_rownames(MetaBC1.df, var = "sample_IDs")
+
+DS13351= MetaBC1.df %>%
+  group_by(batch) %>%
+  filter(batch==1) %>%
+  column_to_rownames(var = "sample_IDs") 
+DS13351= as.data.frame(t(DS13351[,-1]))
+
+PD13351= Pmeta3 %>%
+  group_by(batch) %>%
+  filter(batch==1)
+
+f.source=factor(PD13351$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit=lmFit(DS13351, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+
+DGE13351<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
+
+DS13425= MetaBC1.df %>%
+  group_by(batch) %>%
+  filter(batch==2) %>%
+  column_to_rownames(var = "sample_IDs") 
+DS13425= as.data.frame(t(DS13425[,-1]))
+
+PD13425= Pmeta3 %>%
+  group_by(batch) %>%
+  filter(batch==2)
+
+f.source=factor(PD13425$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit=lmFit(DS13425, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+DGE13425<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
+
+DS26281= MetaBC1.df %>%
+  group_by(batch) %>%
+  filter(batch==3) %>%
+  column_to_rownames(var = "sample_IDs") 
+DS26281= as.data.frame(t(DS26281[,-1]))
+
+PD26281= Pmeta3 %>%
+  group_by(batch) %>%
+  filter(batch==3)
+
+f.source=factor(PD26281$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit=lmFit(DS26281, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+DGE26281<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
+
+DS26366= MetaBC1.df %>%
+  group_by(batch) %>%
+  filter(batch==4) %>%
+  column_to_rownames(var = "sample_IDs") 
+DS26366= as.data.frame(t(DS26366[,-1]))
+
+PD26366= Pmeta3 %>%
+  group_by(batch) %>%
+  filter(batch==4)
+
+f.source=factor(PD26366$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit=lmFit(DS26366, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+DGE26366<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
+
+DS79533= MetaBC1.df %>%
+  group_by(batch) %>%
+  filter(batch==5) %>%
+  column_to_rownames(var = "sample_IDs") 
+DS79533= as.data.frame(t(DS79533[,-1]))
+
+PD79533= Pmeta3 %>%
+  group_by(batch) %>%
+  filter(batch==5)
+
+f.source=factor(PD79533$Mutation, levels = c("control", "case"))
+design_metafile <- model.matrix(~ 0+factor(f.source))
+colnames(design_metafile) <-c("control", "case")
+fit=lmFit(DS79533, design_metafile)
+
+contrast.matrix <- makeContrasts(case-control, levels = design_metafile)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+DGE79533<-topTable(fit2, n=Inf, adjust="BH", confint=0.95)
